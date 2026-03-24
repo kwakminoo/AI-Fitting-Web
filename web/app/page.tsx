@@ -88,8 +88,21 @@ export default function Home() {
     try {
       const res = await fetch(resultUrl);
       const blob = await res.blob();
+      const imageBitmap = await createImageBitmap(blob);
+      const canvas = document.createElement("canvas");
+      canvas.width = imageBitmap.width;
+      canvas.height = imageBitmap.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("이미지 변환 컨텍스트를 만들 수 없습니다.");
+      ctx.drawImage(imageBitmap, 0, 0);
+      const pngBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((value) => {
+          if (value) resolve(value);
+          else reject(new Error("PNG 변환에 실패했습니다."));
+        }, "image/png");
+      });
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      a.href = URL.createObjectURL(pngBlob);
       a.download = `virtual-fitting-${Date.now()}.png`;
       a.click();
       URL.revokeObjectURL(a.href);
@@ -131,7 +144,7 @@ export default function Home() {
   const largeSrc =
     compareMode === "before" ? userPreviewUrl : resultUrl || userPreviewUrl;
   const largeAlt =
-    compareMode === "before" ? "원본 전신 사진" : "가상 피팅 결과";
+    compareMode === "before" ? "원본 전신 사진" : "의상 교체 후 합성 이미지";
 
   return (
     <div className="flex min-h-full flex-col bg-[var(--background)]">
@@ -164,14 +177,17 @@ export default function Home() {
               Virtual try-on
             </p>
             <h1 className="font-display text-4xl font-semibold leading-tight text-neutral-900 sm:text-5xl md:text-6xl">
-              구매 전에,
+              내 사진은 그대로,
               <br />
-              내게 어울리는지 미리 입어 보세요
+              옷만 갈아입혀 보기
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-neutral-600">
-              정면 전신 사진과 옷(또는 모델 착용) 이미지를 올리면 AI가 옷을
-              합성해 드립니다. 화이트 톤의 깔끔한 공간에서 패션 잡지처럼 결과를
-              감상해 보세요.
+              이 서비스는 <strong className="font-semibold text-neutral-800">배경 지우기·얼굴 합성 등은 하지 않습니다.</strong>{" "}
+              <strong className="font-semibold text-neutral-800">내 전신 사진</strong>과{" "}
+              <strong className="font-semibold text-neutral-800">옷 사진</strong>만 받아,{" "}
+              내 사진 속 <strong className="font-semibold text-neutral-800">인물·포즈·배경은 유지</strong>한 채{" "}
+              <strong className="font-semibold text-neutral-800">입고 있던 옷만</strong> 옷 사진의 옷으로 바꾼{" "}
+              <strong className="font-semibold text-neutral-800">이미지 1장</strong>을 만듭니다.
             </p>
           </div>
         </section>
@@ -186,7 +202,10 @@ export default function Home() {
               피팅 시작하기
             </h2>
             <p className="text-neutral-600">
-              왼쪽에 전신 사진, 가운데에 옷 이미지를 올린 뒤 결과 보기를 누르세요.
+              왼쪽은 <strong className="font-medium text-neutral-800">피팅될 나(전신)</strong>,
+              가운데는 <strong className="font-medium text-neutral-800">입히고 싶은 옷</strong>
+              (옷만 보이는 사진 또는 모델이 입은 사진)입니다. 결과는 항상{" "}
+              <strong className="font-medium text-neutral-800">합성 이미지 1장</strong>입니다.
             </p>
           </div>
 
@@ -194,20 +213,20 @@ export default function Home() {
             <ImageDropzone
               label="내 사진 업로드"
               hint="JPG · PNG"
-              guide="사람 사진은 정면 전신 사진이 가장 잘 나옵니다. 배경이 단순할수록 좋습니다."
+              guide="가상 피팅이 적용될 인물(나)입니다. 정면 전신이 가장 잘 나옵니다."
               value={userFile}
               onFileChange={setUserFile}
             />
             <ImageDropzone
               label="옷 사진 업로드"
               hint="JPG · PNG"
-              guide="단품 컷이나 모델 착용 컷 모두 사용할 수 있습니다. 옷이 잘 보이는 이미지를 권장합니다."
+              guide="입히고 싶은 옷입니다. 옷만 찍은 상품 컷이나, 모델이 입고 있는 사진 모두 가능합니다. (모델 얼굴·몸은 결과에 쓰이지 않고 옷 참고용입니다.)"
               value={clothFile}
               onFileChange={setClothFile}
             />
             <div className="flex flex-col justify-center gap-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
               <p className="text-sm text-neutral-600">
-                두 이미지가 모두 준비되면 AI 가상 피팅을 실행합니다.
+                준비되면 내 전신 사진 위에, 옷 이미지의 의상만 합성한 1장을 받습니다.
               </p>
               <button
                 type="button"
@@ -223,7 +242,7 @@ export default function Home() {
                 ) : (
                   <>
                     <Sparkles className="h-4 w-4" aria-hidden />
-                    결과 보기
+                    옷 합성하기
                   </>
                 )}
               </button>
@@ -271,10 +290,11 @@ export default function Home() {
             <div className="mt-14 space-y-10 border-t border-neutral-200 pt-14">
               <div className="text-center sm:text-left">
                 <h3 className="font-display text-2xl font-semibold text-neutral-900 sm:text-3xl">
-                  피팅 결과
+                  의상 교체 결과
                 </h3>
                 <p className="mt-1 text-sm text-neutral-600">
-                  원본과 옷, 결과를 한 화면에서 비교할 수 있습니다.
+                  아래 오른쪽이 <strong className="font-medium text-neutral-800">옷만 바뀐 최종 이미지 1장</strong>
+                  입니다. 왼쪽·가운데는 입력으로 넣은 참고용입니다.
                 </p>
               </div>
 
@@ -306,12 +326,12 @@ export default function Home() {
                 <figure className="overflow-hidden rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
                   <figcaption className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
                     <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                    가상 피팅
+                    옷만 바뀐 결과
                   </figcaption>
                   <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-neutral-100">
                     <Image
                       src={resultUrl}
-                      alt="가상 피팅 결과"
+                      alt="의상만 교체된 합성 결과"
                       fill
                       className="object-cover"
                       sizes="(max-width: 768px) 100vw, 33vw"
@@ -323,7 +343,7 @@ export default function Home() {
 
               <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
                 <p className="mb-4 text-center text-xs font-semibold uppercase tracking-wider text-neutral-500 sm:text-left">
-                  Before / After
+                  원본 vs 옷 교체 후
                 </p>
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
                   <div className="flex flex-1 flex-col gap-3">
@@ -348,7 +368,7 @@ export default function Home() {
                             : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
                         }`}
                       >
-                        피팅 후
+                        옷 교체 후
                       </button>
                     </div>
                     <div className="relative aspect-[3/4] max-h-[min(70vh,520px)] w-full overflow-hidden rounded-xl bg-neutral-100">

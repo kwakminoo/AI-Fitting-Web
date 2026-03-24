@@ -17,7 +17,7 @@ const sans = DM_Sans({
 export const metadata: Metadata = {
   title: "AI Virtual Fitting Room",
   description:
-    "전신 사진과 옷 이미지로 가상 피팅을 미리 경험하는 AI 서비스입니다.",
+    "내 전신 사진의 인물은 그대로 두고, 옷만 옷 이미지 기준으로 바꾼 합성 결과 1장을 만듭니다.",
 };
 
 export default function RootLayout({
