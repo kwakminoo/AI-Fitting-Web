@@ -16,6 +16,13 @@ import { postTryOn } from "@/lib/api";
 
 type CompareMode = "before" | "after";
 
+/** 합성 결과가 data URL일 때 fetch/공유가 브라우저마다 다를 수 있어 Blob으로 통일 */
+async function resultUrlToBlob(resultUrl: string): Promise<Blob> {
+  const res = await fetch(resultUrl);
+  if (!res.ok) throw new Error("결과 이미지를 불러오지 못했습니다.");
+  return res.blob();
+}
+
 export default function Home() {
   const fittingRef = useRef<HTMLElement | null>(null);
   const [userFile, setUserFile] = useState<File | null>(null);
@@ -86,8 +93,7 @@ export default function Home() {
   const downloadResult = async () => {
     if (!resultUrl) return;
     try {
-      const res = await fetch(resultUrl);
-      const blob = await res.blob();
+      const blob = await resultUrlToBlob(resultUrl);
       const imageBitmap = await createImageBitmap(blob);
       const canvas = document.createElement("canvas");
       canvas.width = imageBitmap.width;
@@ -114,9 +120,8 @@ export default function Home() {
   const shareResult = async () => {
     if (!resultUrl) return;
     try {
-      const res = await fetch(resultUrl);
-      const blob = await res.blob();
-      const file = new File([blob], "virtual-fitting.png", { type: blob.type });
+      const blob = await resultUrlToBlob(resultUrl);
+      const file = new File([blob], "virtual-fitting.png", { type: blob.type || "image/png" });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
           title: "AI Virtual Fitting Room",
@@ -129,16 +134,26 @@ export default function Home() {
       /* fall through */
     }
     try {
-      await navigator.clipboard.writeText(resultUrl);
-      alert("결과 이미지 URL이 클립보드에 복사되었습니다.");
+      const clipBlob = await resultUrlToBlob(resultUrl);
+      if (navigator.clipboard?.write) {
+        const mime = clipBlob.type || "image/png";
+        await navigator.clipboard.write([new ClipboardItem({ [mime]: clipBlob })]);
+        alert("결과 이미지가 클립보드에 복사되었습니다. 메신저 등에 붙여넣기 하세요.");
+        return;
+      }
     } catch {
-      const text = encodeURIComponent("가상 피팅 결과");
-      window.open(
-        `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(resultUrl)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
+      /* fall through */
     }
+    try {
+      if (!resultUrl.startsWith("data:")) {
+        await navigator.clipboard.writeText(resultUrl);
+        alert("결과 이미지 URL이 클립보드에 복사되었습니다.");
+        return;
+      }
+    } catch {
+      /* fall through */
+    }
+    alert("공유에 실패했습니다. 다운로드 후 직접 공유해 주세요.");
   };
 
   const largeSrc =

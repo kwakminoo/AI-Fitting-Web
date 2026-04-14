@@ -1,5 +1,30 @@
 # AI-Fitting — 문제 정의서 (딥러닝 기반)
 
+## 0. 저장소 실행 요약 (FASHN VTON 로컬)
+
+- **구성:** Next.js [`web/`](web/) + FastAPI [`backend/`](backend/). 가상 피팅은 [FASHN VTON v1.5](https://github.com/fashn-AI/fashn-vton-1.5) **사전학습 가중치**로 로컬 GPU에서 추론합니다 (Replicate 등 외부 유료 API 없음).
+- **가중치:** 공식 레포의 `scripts/download_weights.py` 로 약 2GB를 받습니다. 저장소 루트에서 `bash scripts/setup-fashn-weights.sh` 를 실행하면 `backend/weights/` (또는 `FASHN_WEIGHTS_DIR`) 에 저장됩니다. `backend/weights/` 는 Git에 포함하지 않습니다.
+- **학습:** FASHN 공식 README는 **엔드유저용 학습·데이터셋 학습 가이드를 제공하지 않습니다.** 본 프로젝트도 사전학습 추론만 사용합니다.
+
+**백엔드 (Linux/WSL2 + NVIDIA 권장):**
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate
+# PyTorch CUDA 휠: https://pytorch.org/get-started/locally/
+pip install -r requirements.txt
+cd .. && bash scripts/setup-fashn-weights.sh
+cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+`backend/.env` 예: `FASHN_WEIGHTS_DIR=/절대경로/.../backend/weights`, `FASHN_CATEGORY=tops` (`tops` \| `bottoms` \| `one-pieces`). 기존 `REPLICATE_CATEGORY`(`upper_body` 등)도 `tops`/`bottoms`/`one-pieces` 로 매핑됩니다. `POST /api/try-on` 응답의 `result_url` 은 `data:image/png;base64,...` 입니다.
+
+**프론트:** `cd web && npm install && npm run dev` — `NEXT_PUBLIC_API_URL` 로 백엔드 URL 지정 가능.
+
+**GitHub 푸시:** `git remote add origin https://github.com/<user>/<repo>.git` 후 `git push -u origin main` (인증은 PAT/SSH).
+
+---
+
 본 문서는 가상 피팅(Virtual Try-On)을 딥러닝 관점에서 정의하고, 데이터·모델·지표·한계를 한곳에 정리합니다. 실험 수치는 환경에 따라 달라지므로, 아래 표와 문단은 **보고서 작성 시 실제 로그·검증 세트로 갱신**하면 됩니다.
 
 ---
@@ -51,7 +76,7 @@ API 연동 시에는 모델 스키마에 맞는 필드명(`human_img`, `garm_img
 
 ### 3.1 첫 번째 ML(딥러닝) 모델
 
-- **접근:** 사전학습 가상 피팅 모델을 **추론(inference)** 으로 실행(예: Replicate 등 호스팅 API 또는 로컬 체크포인트).
+- **접근:** 사전학습 가상 피팅 모델을 **추론(inference)** 으로 로컬 실행(FASHN VTON v1.5 가중치).
 - **입력:** 전처리된 사람 이미지 + 의류 이미지(필요 시 리사이즈·정규화).
 - **출력:** 합성 이미지(텐서 또는 PNG/JPEG).
 
@@ -97,7 +122,7 @@ API 연동 시에는 모델 스키마에 맞는 필드명(`human_img`, `garm_img
 
 ### 5.2 운영·딥러닝 파이프라인 측면
 
-- **외부 API 의존:** 지연, 할당량, 모델 버전 변경에 따른 **재현성·스키마 호환** 이슈.
+- **로컬 GPU 의존:** VRAM·드라이버·CUDA 정합, 추론 지연이 서비스 SLA에 직접 영향.
 - **학습 미수행 시:** 도메인 특화 **미세조정(fine-tuning)** 이 없으면 특정 의류/체형에서 성능 한계가 명확할 수 있음.
 
 ### 5.3 개선 방향

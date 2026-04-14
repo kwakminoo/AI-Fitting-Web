@@ -1,5 +1,10 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
-httpx>=0.27.0
 python-dotenv>=1.0.0
+# PyTorch: Linux/WSL2 + NVIDIA — CUDA 휠은 https://pytorch.org/get-started/locally/ 에서 설치 후
+# 나머지 의존성 설치를 권장합니다. 예: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+torch>=2.0.0
+torchvision>=0.15.0
+# FASHN VTON v1.5 (Apache-2.0). onnxruntime-gpu 등은 패키지 의존성으로 설치됩니다.
+fashn-vton @ git+https://github.com/fashn-AI/fashn-vton-1.5.git
