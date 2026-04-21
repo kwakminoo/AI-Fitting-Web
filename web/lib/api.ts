@@ -1,10 +1,12 @@
-const DEFAULT_BASE = "http://localhost:8000";
-
 export function getApiBase(): string {
   if (typeof process.env.NEXT_PUBLIC_API_URL === "string") {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
   }
-  return DEFAULT_BASE;
+  // 배포 환경에서는 same-origin 프록시(/api/try-on)를 우선 사용한다.
+  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+    return "";
+  }
+  return "http://localhost:8000";
 }
 
 export type TryOnResponse = {

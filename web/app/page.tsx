@@ -34,6 +34,7 @@ export default function Home() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState<CompareMode>("after");
   const abortRef = useRef<AbortController | null>(null);
+  const autoSubmittedKeyRef = useRef<string>("");
 
   useEffect(() => {
     if (!userFile) {
@@ -57,7 +58,7 @@ export default function Home() {
 
   const canSubmit = Boolean(userFile && clothFile && !loading);
 
-  const handleTryOn = async () => {
+  const handleTryOn = useCallback(async () => {
     if (!userFile || !clothFile) return;
     setError(null);
     setLoading(true);
@@ -79,7 +80,15 @@ export default function Home() {
       setLoading(false);
       abortRef.current = null;
     }
-  };
+  }, [clothFile, userFile]);
+
+  useEffect(() => {
+    if (!userFile || !clothFile || loading) return;
+    const key = `${userFile.name}:${userFile.lastModified}|${clothFile.name}:${clothFile.lastModified}`;
+    if (autoSubmittedKeyRef.current === key) return;
+    autoSubmittedKeyRef.current = key;
+    void handleTryOn();
+  }, [userFile, clothFile, loading, handleTryOn]);
 
   const resetToUpload = useCallback(() => {
     setUserFile(null);
@@ -87,6 +96,7 @@ export default function Home() {
     setResultUrl(null);
     setError(null);
     setCompareMode("after");
+    autoSubmittedKeyRef.current = "";
     fittingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
