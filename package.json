@@ -1,6 +1,11 @@
 {
   "name": "ai-fitting-web-main",
   "private": true,
+  "dependencies": {
+    "next": "16.2.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
   "scripts": {
     "dev": "npm --prefix web run dev",
     "build": "npm --prefix web run build",
