@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
   "installCommand": "npm install && npm --prefix web install",
-  "buildCommand": "npm --prefix web run build && cp -r web/.next ./.next && cp -r web/public ./public",
+  "buildCommand": "cd web && npm run build -- --webpack && cd .. && cp -r web/.next ./.next && cp -r web/public ./public",
   "devCommand": "npm --prefix web run dev"
 }
