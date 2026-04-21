@@ -227,14 +227,14 @@ export default function Home() {
           <div className="grid gap-8 lg:grid-cols-[1fr_1fr_minmax(200px,240px)] lg:items-stretch">
             <ImageDropzone
               label="내 사진 업로드"
-              hint="JPG · PNG"
+              hint="JPG · PNG · WebP"
               guide="가상 피팅이 적용될 인물(나)입니다. 정면 전신이 가장 잘 나옵니다."
               value={userFile}
               onFileChange={setUserFile}
             />
             <ImageDropzone
               label="옷 사진 업로드"
-              hint="JPG · PNG"
+              hint="JPG · PNG · WebP"
               guide="입히고 싶은 옷입니다. 옷만 찍은 상품 컷이나, 모델이 입고 있는 사진 모두 가능합니다. (모델 얼굴·몸은 결과에 쓰이지 않고 옷 참고용입니다.)"
               value={clothFile}
               onFileChange={setClothFile}

@@ -1,3 +1,11 @@
+# 백엔드 (프로젝트 루트에서)
+$env:FASHN_WEIGHTS_DIR = "c:\Users\kwakm\OneDrive\Desktop\Cusor-Project\AI-Fitting-Web-main\backend\weights"
+cd c:\Users\kwakm\OneDrive\Desktop\Cusor-Project\AI-Fitting-Web-main\backend
+.\.venv\Scripts\uvicorn.exe main:app --host 127.0.0.1 --port 8000
+
+cd c:\Users\kwakm\OneDrive\Desktop\Cusor-Project\AI-Fitting-Web-main\web
+npm run dev
+
 # AI-Fitting — 문제 정의서 (딥러닝 기반)
 
 ## 0. 저장소 실행 요약 (FASHN VTON 로컬)

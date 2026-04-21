@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ImagePlus, Trash2, Upload } from "lucide-react";
 
-const ALLOWED = new Set(["image/jpeg", "image/png"]);
+const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export type ImageDropzoneProps = {
   label: string;
@@ -44,7 +44,7 @@ export function ImageDropzone({
         return;
       }
       if (!ALLOWED.has(file.type)) {
-        setRejectMsg("JPG 또는 PNG 파일만 업로드할 수 있습니다.");
+        setRejectMsg("JPG, PNG 또는 WebP 파일만 업로드할 수 있습니다.");
         return;
       }
       onFileChange(file);
@@ -114,7 +114,7 @@ export function ImageDropzone({
           ref={inputRef}
           id={inputId}
           type="file"
-          accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
           className="sr-only"
           onChange={onInputChange}
         />

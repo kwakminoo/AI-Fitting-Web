@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
+from statistics import mean, quantiles
+from time import perf_counter
 from typing import Final
 
 from dotenv import load_dotenv
@@ -25,8 +28,69 @@ logger = logging.getLogger(__name__)
 if not _env_file.is_file():
     logger.warning("backend/.env 파일이 없습니다: %s", _env_file)
 
-ALLOWED_TYPES: Final[frozenset[str]] = frozenset({"image/jpeg", "image/png"})
+ALLOWED_TYPES: Final[frozenset[str]] = frozenset(
+    {"image/jpeg", "image/png", "image/webp"},
+)
 MAX_BYTES: Final[int] = int(os.environ.get("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
+METRICS_WINDOW_SIZE: Final[int] = int(os.environ.get("TRY_ON_METRICS_WINDOW_SIZE", "300"))
+
+
+class TryOnMetrics:
+    """/api/try-on 성능 지표(메모리 기반) 수집기."""
+
+    def __init__(self, window_size: int = 300) -> None:
+        self.window_size = max(10, window_size)
+        self.total_requests = 0
+        self.success_requests = 0
+        self.failed_requests = 0
+        self.latencies_ms: deque[float] = deque(maxlen=self.window_size)
+
+    def record(self, *, success: bool, latency_ms: float) -> None:
+        self.total_requests += 1
+        if success:
+            self.success_requests += 1
+        else:
+            self.failed_requests += 1
+        self.latencies_ms.append(latency_ms)
+
+    def snapshot(self) -> dict[str, int | float]:
+        latency_list = list(self.latencies_ms)
+        if latency_list:
+            if len(latency_list) >= 2:
+                percentile_values = quantiles(latency_list, n=100, method="inclusive")
+                p50 = percentile_values[49]
+                p95 = percentile_values[94]
+            else:
+                p50 = latency_list[0]
+                p95 = latency_list[0]
+            avg_ms = mean(latency_list)
+            min_ms = min(latency_list)
+            max_ms = max(latency_list)
+        else:
+            p50 = 0.0
+            p95 = 0.0
+            avg_ms = 0.0
+            min_ms = 0.0
+            max_ms = 0.0
+
+        success_rate = (
+            (self.success_requests / self.total_requests) * 100.0 if self.total_requests else 0.0
+        )
+        return {
+            "window_size": self.window_size,
+            "total_requests": self.total_requests,
+            "success_requests": self.success_requests,
+            "failed_requests": self.failed_requests,
+            "success_rate_percent": round(success_rate, 2),
+            "latency_avg_ms": round(avg_ms, 2),
+            "latency_p50_ms": round(p50, 2),
+            "latency_p95_ms": round(p95, 2),
+            "latency_min_ms": round(min_ms, 2),
+            "latency_max_ms": round(max_ms, 2),
+        }
+
+
+try_on_metrics = TryOnMetrics(window_size=METRICS_WINDOW_SIZE)
 
 
 @asynccontextmanager
@@ -81,6 +145,16 @@ async def health() -> dict[str, str | bool | None]:
     }
 
 
+@app.get("/metrics", summary="가상 피팅 성능 지표")
+async def metrics() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "service": "AI Virtual Fitting Room API",
+        "try_on": try_on_metrics.snapshot(),
+        "fashn": fashn_health(),
+    }
+
+
 @app.post(
     "/api/try-on",
     summary="의상만 교체하는 가상 피팅 (FASHN VTON 로컬)",
@@ -94,15 +168,17 @@ async def try_on(
     user_img: UploadFile = File(..., description="피팅될 사람(전신)"),
     cloth_img: UploadFile = File(..., description="입힐 옷 참고(단품·모델 착용 컷)"),
 ) -> dict[str, str]:
+    start = perf_counter()
+
     if user_img.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=400,
-            detail="user_img는 image/jpeg 또는 image/png만 허용됩니다.",
+            detail="user_img는 image/jpeg, image/png, image/webp만 허용됩니다.",
         )
     if cloth_img.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=400,
-            detail="cloth_img는 image/jpeg 또는 image/png만 허용됩니다.",
+            detail="cloth_img는 image/jpeg, image/png, image/webp만 허용됩니다.",
         )
 
     user_bytes = await user_img.read()
@@ -128,7 +204,11 @@ async def try_on(
 
     try:
         result_url = await run_fashn_try_on(user_bytes, cloth_bytes)
+        elapsed_ms = (perf_counter() - start) * 1000.0
+        try_on_metrics.record(success=True, latency_ms=elapsed_ms)
     except RuntimeError as e:
+        elapsed_ms = (perf_counter() - start) * 1000.0
+        try_on_metrics.record(success=False, latency_ms=elapsed_ms)
         logger.warning("try-on failed: %s", e)
         raise HTTPException(status_code=502, detail=str(e)) from e
 
