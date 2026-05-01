@@ -10,6 +10,7 @@ import base64
 import io
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -24,6 +25,35 @@ _weights_dir_resolved: Path | None = None
 
 GarmentPhotoType = Literal["model", "flat-lay"]
 FashnCategory = Literal["tops", "bottoms", "one-pieces"]
+SpeedPreset = Literal["fast", "default", "slow"]
+
+# 실험(T1~T6 × 3×3) 후 확정: fast=T2, default=T3, slow=T5 — docs/experiments/EXPERIMENT_REPORT.md
+SPEED_PRESET_STEPS_GUIDANCE: dict[SpeedPreset, tuple[int, float]] = {
+    "fast": (22, 1.35),
+    "default": (30, 1.50),
+    "slow": (40, 1.80),
+}
+
+# T1~T6 실험용 (run_matrix 등)
+TRIAL_PRESETS: list[tuple[str, int, float]] = [
+    ("T1", 18, 1.20),
+    ("T2", 22, 1.35),
+    ("T3", 30, 1.50),
+    ("T4", 34, 1.65),
+    ("T5", 40, 1.80),
+    ("T6", 46, 2.00),
+]
+
+
+@dataclass(frozen=True)
+class TryOnParams:
+    """요청 단위 FASHN 추론 파라미터."""
+
+    category: FashnCategory
+    garment_photo_type: GarmentPhotoType
+    num_timesteps: int
+    guidance_scale: float
+    seed: int
 
 
 def _default_weights_dir() -> Path:
@@ -53,6 +83,44 @@ def _resolve_garment_photo_type() -> GarmentPhotoType:
     if v in ("model", "flat-lay"):
         return v  # type: ignore[return-value]
     return "model"
+
+
+def resolve_speed_preset(preset: str) -> tuple[int, float]:
+    """빠름/기본/느림 → (num_timesteps, guidance_scale)."""
+    key = preset.strip().lower()
+    if key in SPEED_PRESET_STEPS_GUIDANCE:
+        return SPEED_PRESET_STEPS_GUIDANCE[key]  # type: ignore[index]
+    return SPEED_PRESET_STEPS_GUIDANCE["default"]
+
+
+def default_try_on_params_from_env() -> TryOnParams:
+    """환경 변수 기반 기본 파라미터(레거시 호환)."""
+    return TryOnParams(
+        category=resolve_fashn_category(),
+        garment_photo_type=_resolve_garment_photo_type(),
+        num_timesteps=int(os.environ.get("FASHN_NUM_TIMESTEPS", "30")),
+        guidance_scale=float(os.environ.get("FASHN_GUIDANCE_SCALE", "1.5")),
+        seed=int(os.environ.get("FASHN_SEED", "42")),
+    )
+
+
+def try_on_params_for_request(
+    *,
+    category: FashnCategory,
+    speed_preset: SpeedPreset,
+    garment_photo_type: GarmentPhotoType | None = None,
+    seed: int | None = None,
+) -> TryOnParams:
+    steps, guidance = resolve_speed_preset(speed_preset)
+    gpt = garment_photo_type if garment_photo_type is not None else _resolve_garment_photo_type()
+    s = seed if seed is not None else int(os.environ.get("FASHN_SEED", "42"))
+    return TryOnParams(
+        category=category,
+        garment_photo_type=gpt,
+        num_timesteps=steps,
+        guidance_scale=guidance,
+        seed=s,
+    )
 
 
 def startup_load_pipeline() -> None:
@@ -94,34 +162,48 @@ def _get_pipeline() -> TryOnPipeline:
     return _pipeline
 
 
-def _run_inference_sync(user_bytes: bytes, cloth_bytes: bytes) -> bytes:
+def run_fashn_inference_sync(user_bytes: bytes, cloth_bytes: bytes, params: TryOnParams) -> bytes:
+    """동기: 사람·의류 바이트 → 합성 PNG 바이트."""
     from PIL import Image
 
     pipeline = _get_pipeline()
     person = Image.open(io.BytesIO(user_bytes)).convert("RGB")
     garment = Image.open(io.BytesIO(cloth_bytes)).convert("RGB")
-    category = resolve_fashn_category()
-    garment_photo_type = _resolve_garment_photo_type()
-    num_timesteps = int(os.environ.get("FASHN_NUM_TIMESTEPS", "30"))
-    guidance_scale = float(os.environ.get("FASHN_GUIDANCE_SCALE", "1.5"))
-    seed = int(os.environ.get("FASHN_SEED", "42"))
 
     out = pipeline(
         person,
         garment,
-        category=category,
-        garment_photo_type=garment_photo_type,
-        num_timesteps=num_timesteps,
-        guidance_scale=guidance_scale,
-        seed=seed,
+        category=params.category,
+        garment_photo_type=params.garment_photo_type,
+        num_timesteps=params.num_timesteps,
+        guidance_scale=params.guidance_scale,
+        seed=params.seed,
     )
     buf = io.BytesIO()
     out.images[0].save(buf, format="PNG")
     return buf.getvalue()
 
 
-async def run_fashn_try_on(user_bytes: bytes, cloth_bytes: bytes) -> str:
-    """합성 PNG를 data:image/png;base64,... URL 형태로 반환 (프론트 호환)."""
-    png = await asyncio.to_thread(_run_inference_sync, user_bytes, cloth_bytes)
+def png_bytes_to_data_url(png: bytes) -> str:
     b64 = base64.b64encode(png).decode("ascii")
     return f"data:image/png;base64,{b64}"
+
+
+async def run_fashn_try_on_bytes(
+    user_bytes: bytes,
+    cloth_bytes: bytes,
+    params: TryOnParams | None = None,
+) -> bytes:
+    """비동기 스레드에서 PNG 바이트 반환."""
+    p = params if params is not None else default_try_on_params_from_env()
+    return await asyncio.to_thread(run_fashn_inference_sync, user_bytes, cloth_bytes, p)
+
+
+async def run_fashn_try_on(
+    user_bytes: bytes,
+    cloth_bytes: bytes,
+    params: TryOnParams | None = None,
+) -> str:
+    """합성 PNG를 data:image/png;base64,... URL 형태로 반환 (프론트 호환)."""
+    png = await run_fashn_try_on_bytes(user_bytes, cloth_bytes, params)
+    return png_bytes_to_data_url(png)

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from statistics import mean, quantiles
 from time import perf_counter
-from typing import Final
+from typing import Final, Literal, cast
 
 from dotenv import load_dotenv
 
@@ -17,10 +17,20 @@ load_dotenv(Path.cwd() / ".env", override=True)
 load_dotenv(Path.cwd() / "backend" / ".env", override=True)
 load_dotenv(_env_file, override=True, encoding="utf-8-sig")
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from services.fashn_vton import fashn_health, run_fashn_try_on, startup_load_pipeline
+from services.fashn_vton import (
+    FashnCategory,
+    GarmentPhotoType,
+    TryOnParams,
+    fashn_health,
+    png_bytes_to_data_url,
+    run_fashn_try_on,
+    run_fashn_try_on_bytes,
+    startup_load_pipeline,
+    try_on_params_for_request,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,6 +41,11 @@ if not _env_file.is_file():
 ALLOWED_TYPES: Final[frozenset[str]] = frozenset(
     {"image/jpeg", "image/png", "image/webp"},
 )
+ALLOWED_CATEGORY: Final[frozenset[str]] = frozenset(
+    {"tops", "bottoms", "one-pieces", "full"},
+)
+ALLOWED_SPEED_PRESET: Final[frozenset[str]] = frozenset({"fast", "default", "slow"})
+FIXED_TRY_ON_SEED: Final[int] = 42
 MAX_BYTES: Final[int] = int(os.environ.get("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 METRICS_WINDOW_SIZE: Final[int] = int(os.environ.get("TRY_ON_METRICS_WINDOW_SIZE", "300"))
 
@@ -155,6 +170,36 @@ async def metrics() -> dict[str, object]:
     }
 
 
+def _parse_speed_preset(raw: str) -> Literal["fast", "default", "slow"]:
+    v = (raw or "default").strip().lower()
+    if v not in ALLOWED_SPEED_PRESET:
+        raise HTTPException(
+            status_code=400,
+            detail="speed_preset은 fast, default, slow 중 하나여야 합니다.",
+        )
+    return cast(Literal["fast", "default", "slow"], v)
+
+
+def _parse_category(raw: str) -> Literal["tops", "bottoms", "one-pieces", "full"]:
+    v = (raw or "tops").strip().lower()
+    if v not in ALLOWED_CATEGORY:
+        raise HTTPException(
+            status_code=400,
+            detail="category는 tops, bottoms, one-pieces, full 중 하나여야 합니다.",
+        )
+    return cast(Literal["tops", "bottoms", "one-pieces", "full"], v)
+
+
+def _parse_garment_photo_type(raw: str) -> GarmentPhotoType:
+    v = (raw or "flat-lay").strip().lower()
+    if v not in ("model", "flat-lay"):
+        raise HTTPException(
+            status_code=400,
+            detail="garment_photo_type은 model 또는 flat-lay 여야 합니다.",
+        )
+    return cast(GarmentPhotoType, v)
+
+
 @app.post(
     "/api/try-on",
     summary="의상만 교체하는 가상 피팅 (FASHN VTON 로컬)",
@@ -167,6 +212,9 @@ async def metrics() -> dict[str, object]:
 async def try_on(
     user_img: UploadFile = File(..., description="피팅될 사람(전신)"),
     cloth_img: UploadFile = File(..., description="입힐 옷 참고(단품·모델 착용 컷)"),
+    cloth_img2: UploadFile | None = File(None, description="전신 모드: 하의 참고 이미지"),
+    category: str = Form("tops", description="tops | bottoms | one-pieces | full"),
+    speed_preset: str = Form("default", description="fast | default | slow"),
 ) -> dict[str, str]:
     start = perf_counter()
 
@@ -183,6 +231,29 @@ async def try_on(
 
     user_bytes = await user_img.read()
     cloth_bytes = await cloth_img.read()
+    cloth2_bytes: bytes | None = None
+    cat = _parse_category(category)
+    sp = _parse_speed_preset(speed_preset)
+
+    if cat == "full":
+        if cloth_img2 is None:
+            raise HTTPException(
+                status_code=400,
+                detail="전신(full) 모드에서는 하의 이미지 cloth_img2가 필요합니다.",
+            )
+        if cloth_img2.content_type not in ALLOWED_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail="cloth_img2는 image/jpeg, image/png, image/webp만 허용됩니다.",
+            )
+        cloth2_bytes = await cloth_img2.read()
+        if len(cloth2_bytes) > MAX_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"파일당 최대 {MAX_BYTES // (1024 * 1024)}MB까지 업로드할 수 있습니다.",
+            )
+        if not cloth2_bytes:
+            raise HTTPException(status_code=400, detail="cloth_img2 빈 파일은 업로드할 수 없습니다.")
 
     if len(user_bytes) > MAX_BYTES or len(cloth_bytes) > MAX_BYTES:
         raise HTTPException(
@@ -203,13 +274,92 @@ async def try_on(
         )
 
     try:
-        result_url = await run_fashn_try_on(user_bytes, cloth_bytes)
+        garment_pt: GarmentPhotoType = "flat-lay"
+        if cat == "full" and cloth2_bytes is not None:
+            params_tops = try_on_params_for_request(
+                category="tops",
+                speed_preset=sp,
+                garment_photo_type=garment_pt,
+                seed=FIXED_TRY_ON_SEED,
+            )
+            params_bottoms = try_on_params_for_request(
+                category="bottoms",
+                speed_preset=sp,
+                garment_photo_type=garment_pt,
+                seed=FIXED_TRY_ON_SEED,
+            )
+            mid_png = await run_fashn_try_on_bytes(user_bytes, cloth_bytes, params_tops)
+            final_png = await run_fashn_try_on_bytes(mid_png, cloth2_bytes, params_bottoms)
+            result_url = png_bytes_to_data_url(final_png)
+        else:
+            fcat: FashnCategory = cast(FashnCategory, cat)
+            params = try_on_params_for_request(
+                category=fcat,
+                speed_preset=sp,
+                garment_photo_type=garment_pt,
+                seed=FIXED_TRY_ON_SEED,
+            )
+            result_url = await run_fashn_try_on(user_bytes, cloth_bytes, params)
         elapsed_ms = (perf_counter() - start) * 1000.0
         try_on_metrics.record(success=True, latency_ms=elapsed_ms)
     except RuntimeError as e:
         elapsed_ms = (perf_counter() - start) * 1000.0
         try_on_metrics.record(success=False, latency_ms=elapsed_ms)
         logger.warning("try-on failed: %s", e)
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    return {"result_url": result_url}
+
+
+@app.post(
+    "/api/try-on/experiment",
+    summary="하이퍼파라미터 실험용 (steps/guidance 직접 지정)",
+    description="T1~T6 등 그리드 실험용. category는 tops|bottoms|one-pieces만 허용.",
+)
+async def try_on_experiment(
+    user_img: UploadFile = File(...),
+    cloth_img: UploadFile = File(...),
+    num_timesteps: int = Form(..., ge=1, le=200),
+    guidance_scale: float = Form(..., gt=0, le=20),
+    category: str = Form("tops"),
+    garment_photo_type: str = Form("flat-lay"),
+    seed: int = Form(FIXED_TRY_ON_SEED),
+) -> dict[str, str]:
+    start = perf_counter()
+    if user_img.content_type not in ALLOWED_TYPES or cloth_img.content_type not in ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail="이미지는 jpeg/png/webp만 허용됩니다.")
+    cat_raw = (category or "tops").strip().lower()
+    if cat_raw not in ("tops", "bottoms", "one-pieces"):
+        raise HTTPException(
+            status_code=400,
+            detail="experiment category는 tops, bottoms, one-pieces 중 하나여야 합니다.",
+        )
+    fcat = cast(FashnCategory, cat_raw)
+    gpt = _parse_garment_photo_type(garment_photo_type)
+
+    user_bytes = await user_img.read()
+    cloth_bytes = await cloth_img.read()
+    if len(user_bytes) > MAX_BYTES or len(cloth_bytes) > MAX_BYTES or not user_bytes or not cloth_bytes:
+        raise HTTPException(status_code=400, detail="파일 크기 또는 내용을 확인하세요.")
+
+    if not fashn_health().get("fashn_ready"):
+        raise HTTPException(status_code=503, detail="FASHN 파이프라인이 로드되지 않았습니다.")
+
+    params = TryOnParams(
+        category=fcat,
+        garment_photo_type=gpt,
+        num_timesteps=num_timesteps,
+        guidance_scale=guidance_scale,
+        seed=seed,
+    )
+    try:
+        result_url = await run_fashn_try_on(user_bytes, cloth_bytes, params)
+        elapsed_ms = (perf_counter() - start) * 1000.0
+        try_on_metrics.record(success=True, latency_ms=elapsed_ms)
+    except RuntimeError as e:
+        elapsed_ms = (perf_counter() - start) * 1000.0
+        try_on_metrics.record(success=False, latency_ms=elapsed_ms)
+        logger.warning("try-on experiment failed: %s", e)
         raise HTTPException(status_code=502, detail=str(e)) from e
 
     return {"result_url": result_url}

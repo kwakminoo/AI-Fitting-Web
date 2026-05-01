@@ -1,0 +1,19 @@
+{
+  "persons": [
+    "C:\\Users\\kwakm\\OneDrive\\Desktop\\Cusor-Project\\AI-Fitting-Web-main\\testIMG\\myIMG\\TEST2.jpg",
+    "C:\\Users\\kwakm\\OneDrive\\Desktop\\Cusor-Project\\AI-Fitting-Web-main\\testIMG\\model.webp",
+    "C:\\Users\\kwakm\\OneDrive\\Desktop\\Cusor-Project\\AI-Fitting-Web-main\\testIMG\\person.webp"
+  ],
+  "garments": [
+    "C:\\Users\\kwakm\\OneDrive\\Desktop\\Cusor-Project\\AI-Fitting-Web-main\\testIMG\\codyIMG\\TESTIMG3.webp",
+    "C:\\Users\\kwakm\\OneDrive\\Desktop\\Cusor-Project\\AI-Fitting-Web-main\\testIMG\\codyIMG\\TESTIMG2.jpg",
+    "C:\\Users\\kwakm\\OneDrive\\Desktop\\Cusor-Project\\AI-Fitting-Web-main\\testIMG\\myIMG\\TEST3.jpg"
+  ],
+  "meta": {
+    "repo_root": "C:\\Users\\kwakm\\OneDrive\\Desktop\\Cusor-Project\\AI-Fitting-Web-main",
+    "testimg_dir": "C:\\Users\\kwakm\\OneDrive\\Desktop\\Cusor-Project\\AI-Fitting-Web-main\\testIMG",
+    "pil_available": true,
+    "fixed_person_env": null,
+    "fixed_garment_env": null
+  }
+}

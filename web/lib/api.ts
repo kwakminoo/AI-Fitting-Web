@@ -13,6 +13,16 @@ export type TryOnResponse = {
   result_url: string;
 };
 
+export type TryOnCategory = "tops" | "bottoms" | "one-pieces" | "full";
+
+export type SpeedPreset = "fast" | "default" | "slow";
+
+export type PostTryOnOptions = {
+  category: TryOnCategory;
+  speedPreset: SpeedPreset;
+  clothFile2?: File | null;
+};
+
 function formatDetail(detail: unknown): string {
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {
@@ -29,12 +39,18 @@ function formatDetail(detail: unknown): string {
 export async function postTryOn(
   userFile: File,
   clothFile: File,
+  options: PostTryOnOptions,
   signal?: AbortSignal,
 ): Promise<TryOnResponse> {
   const base = getApiBase();
   const body = new FormData();
   body.append("user_img", userFile);
   body.append("cloth_img", clothFile);
+  body.append("category", options.category);
+  body.append("speed_preset", options.speedPreset);
+  if (options.clothFile2) {
+    body.append("cloth_img2", options.clothFile2);
+  }
 
   const res = await fetch(`${base}/api/try-on`, {
     method: "POST",

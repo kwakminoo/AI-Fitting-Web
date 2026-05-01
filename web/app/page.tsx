@@ -12,9 +12,15 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ImageDropzone } from "@/components/ImageDropzone";
-import { postTryOn } from "@/lib/api";
+import { postTryOn, type PostTryOnOptions, type TryOnCategory, type SpeedPreset } from "@/lib/api";
 
 type CompareMode = "before" | "after";
+
+function pillToggleClass(pressed: boolean): string {
+  return pressed
+    ? "bg-neutral-900 text-white"
+    : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200";
+}
 
 /** 합성 결과가 data URL일 때 fetch/공유가 브라우저마다 다를 수 있어 Blob으로 통일 */
 async function resultUrlToBlob(resultUrl: string): Promise<Blob> {
@@ -27,14 +33,24 @@ export default function Home() {
   const fittingRef = useRef<HTMLElement | null>(null);
   const [userFile, setUserFile] = useState<File | null>(null);
   const [clothFile, setClothFile] = useState<File | null>(null);
+  const [clothFile2, setClothFile2] = useState<File | null>(null);
+  const [category, setCategory] = useState<TryOnCategory>("tops");
+  const [speedPreset, setSpeedPreset] = useState<SpeedPreset>("default");
   const [userPreviewUrl, setUserPreviewUrl] = useState<string | null>(null);
   const [clothPreviewUrl, setClothPreviewUrl] = useState<string | null>(null);
+  const [clothPreviewUrl2, setClothPreviewUrl2] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState<CompareMode>("after");
   const abortRef = useRef<AbortController | null>(null);
   const autoSubmittedKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    if (category !== "full") {
+      setClothFile2(null);
+    }
+  }, [category]);
 
   useEffect(() => {
     if (!userFile) {
@@ -56,19 +72,37 @@ export default function Home() {
     return () => URL.revokeObjectURL(u);
   }, [clothFile]);
 
-  const canSubmit = Boolean(userFile && clothFile && !loading);
+  useEffect(() => {
+    if (!clothFile2) {
+      setClothPreviewUrl2(null);
+      return;
+    }
+    const u = URL.createObjectURL(clothFile2);
+    setClothPreviewUrl2(u);
+    return () => URL.revokeObjectURL(u);
+  }, [clothFile2]);
+
+  const clothReady = category === "full" ? Boolean(clothFile && clothFile2) : Boolean(clothFile);
+  const canSubmit = Boolean(userFile && clothReady && !loading);
 
   const handleTryOn = useCallback(async () => {
     if (!userFile || !clothFile) return;
+    if (category === "full" && !clothFile2) return;
     setError(null);
     setLoading(true);
     setResultUrl(null);
     abortRef.current?.abort();
     abortRef.current = new AbortController();
+    const options: PostTryOnOptions = {
+      category,
+      speedPreset,
+      ...(category === "full" && clothFile2 ? { clothFile2 } : {}),
+    };
     try {
       const { result_url } = await postTryOn(
         userFile,
         clothFile,
+        options,
         abortRef.current.signal,
       );
       setResultUrl(result_url);
@@ -80,19 +114,21 @@ export default function Home() {
       setLoading(false);
       abortRef.current = null;
     }
-  }, [clothFile, userFile]);
+  }, [category, clothFile, clothFile2, speedPreset, userFile]);
 
   useEffect(() => {
-    if (!userFile || !clothFile || loading) return;
-    const key = `${userFile.name}:${userFile.lastModified}|${clothFile.name}:${clothFile.lastModified}`;
+    if (!userFile || !clothReady || loading) return;
+    const c2part = clothFile2 ? `${clothFile2.name}:${clothFile2.lastModified}` : "";
+    const key = `${userFile.name}:${userFile.lastModified}|${clothFile?.name}:${clothFile?.lastModified}|${c2part}|${category}|${speedPreset}`;
     if (autoSubmittedKeyRef.current === key) return;
     autoSubmittedKeyRef.current = key;
     void handleTryOn();
-  }, [userFile, clothFile, loading, handleTryOn]);
+  }, [userFile, clothFile, clothFile2, clothReady, category, speedPreset, loading, handleTryOn]);
 
   const resetToUpload = useCallback(() => {
     setUserFile(null);
     setClothFile(null);
+    setClothFile2(null);
     setResultUrl(null);
     setError(null);
     setCompareMode("after");
@@ -171,6 +207,11 @@ export default function Home() {
   const largeAlt =
     compareMode === "before" ? "원본 전신 사진" : "의상 교체 후 합성 이미지";
 
+  const gridCols =
+    category === "full"
+      ? "lg:grid-cols-[1fr_1fr_1fr_minmax(200px,240px)]"
+      : "lg:grid-cols-[1fr_1fr_minmax(200px,240px)]";
+
   return (
     <div className="flex min-h-full flex-col bg-[var(--background)]">
       <header className="sticky top-0 z-20 border-b border-neutral-200/80 bg-white/90 backdrop-blur-md">
@@ -232,9 +273,73 @@ export default function Home() {
               (옷만 보이는 사진 또는 모델이 입은 사진)입니다. 결과는 항상{" "}
               <strong className="font-medium text-neutral-800">합성 이미지 1장</strong>입니다.
             </p>
+            <div className="mt-4 flex flex-col gap-4">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                  착용 부위
+                </p>
+                <div
+                  className="flex flex-wrap justify-center gap-2 sm:justify-start"
+                  role="group"
+                  aria-label="착용 부위 선택"
+                >
+                  {(
+                    [
+                      { id: "tops" as const, label: "상의" },
+                      { id: "bottoms" as const, label: "하의" },
+                      { id: "full" as const, label: "전신" },
+                      { id: "one-pieces" as const, label: "원피스" },
+                    ] as const
+                  ).map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={category === id}
+                      onClick={() => setCategory(id)}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${pillToggleClass(category === id)}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {category === "full" ? (
+                  <p className="mt-2 text-xs text-neutral-500">
+                    전신은 상의 이미지로 먼저 합성한 뒤, 그 결과에 하의를 이어서 합성합니다.
+                  </p>
+                ) : null}
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                  합성 품질·속도
+                </p>
+                <div
+                  className="flex flex-wrap justify-center gap-2 sm:justify-start"
+                  role="group"
+                  aria-label="품질 및 속도 프리셋"
+                >
+                  {(
+                    [
+                      { id: "fast" as const, label: "빠름" },
+                      { id: "default" as const, label: "기본" },
+                      { id: "slow" as const, label: "느림" },
+                    ] as const
+                  ).map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={speedPreset === id}
+                      onClick={() => setSpeedPreset(id)}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${pillToggleClass(speedPreset === id)}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-8 lg:grid-cols-[1fr_1fr_minmax(200px,240px)] lg:items-stretch">
+          <div className={`grid gap-8 ${gridCols} lg:items-stretch`}>
             <ImageDropzone
               label="내 사진 업로드"
               hint="JPG · PNG · WebP"
@@ -243,12 +348,25 @@ export default function Home() {
               onFileChange={setUserFile}
             />
             <ImageDropzone
-              label="옷 사진 업로드"
+              label={category === "full" ? "상의 참고 업로드" : "옷 사진 업로드"}
               hint="JPG · PNG · WebP"
-              guide="입히고 싶은 옷입니다. 옷만 찍은 상품 컷이나, 모델이 입고 있는 사진 모두 가능합니다. (모델 얼굴·몸은 결과에 쓰이지 않고 옷 참고용입니다.)"
+              guide={
+                category === "full"
+                  ? "먼저 입힐 상의(또는 상의만 보이는 참고 컷)를 올려 주세요."
+                  : "입히고 싶은 옷입니다. 옷만 찍은 상품 컷이나, 모델이 입고 있는 사진 모두 가능합니다. (모델 얼굴·몸은 결과에 쓰이지 않고 옷 참고용입니다.)"
+              }
               value={clothFile}
               onFileChange={setClothFile}
             />
+            {category === "full" ? (
+              <ImageDropzone
+                label="하의 참고 업로드"
+                hint="JPG · PNG · WebP"
+                guide="상의 합성이 끝난 결과 위에 입힐 하의 참고 이미지입니다."
+                value={clothFile2}
+                onFileChange={setClothFile2}
+              />
+            ) : null}
             <div className="flex flex-col justify-center gap-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
               <p className="text-sm text-neutral-600">
                 준비되면 내 전신 사진 위에, 옷 이미지의 의상만 합성한 1장을 받습니다.
@@ -271,9 +389,11 @@ export default function Home() {
                   </>
                 )}
               </button>
-              {!userFile || !clothFile ? (
+              {!userFile || !clothReady ? (
                 <p className="text-xs text-neutral-400">
-                  전신 사진과 옷 사진을 모두 업로드하면 버튼이 활성화됩니다.
+                  {category === "full"
+                    ? "전신 모드에서는 전신 사진, 상의, 하의 이미지를 모두 올려야 합니다."
+                    : "전신 사진과 옷 사진을 모두 업로드하면 버튼이 활성화됩니다."}
                 </p>
               ) : null}
             </div>
@@ -339,14 +459,24 @@ export default function Home() {
                 <figure className="overflow-hidden rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
                   <figcaption className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
                     <Shirt className="h-3.5 w-3.5" aria-hidden />
-                    옷
+                    {category === "full" ? "상의·하의 참고" : "옷"}
                   </figcaption>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={clothPreviewUrl}
-                    alt="업로드한 옷 이미지"
-                    className="aspect-[3/4] w-full rounded-lg object-cover"
-                  />
+                  <div className="flex aspect-[3/4] w-full flex-col gap-1 rounded-lg bg-neutral-50 p-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={clothPreviewUrl}
+                      alt="참고 옷 이미지"
+                      className="h-1/2 w-full rounded-md object-contain"
+                    />
+                    {category === "full" && clothPreviewUrl2 ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={clothPreviewUrl2}
+                        alt="하의 참고 이미지"
+                        className="h-1/2 w-full rounded-md object-contain"
+                      />
+                    ) : null}
+                  </div>
                 </figure>
                 <figure className="overflow-hidden rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
                   <figcaption className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
@@ -422,13 +552,21 @@ export default function Home() {
                     <p className="text-xs font-medium text-neutral-500">
                       참고 · 옷
                     </p>
-                    <div className="relative h-52 w-full overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 sm:h-64 lg:h-48 lg:w-full">
+                    <div className="relative flex h-52 w-full flex-col gap-1 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 sm:h-64 lg:h-48 lg:w-full">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={clothPreviewUrl}
                         alt=""
-                        className="h-full w-full object-contain"
+                        className="max-h-[48%] w-full object-contain"
                       />
+                      {category === "full" && clothPreviewUrl2 ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={clothPreviewUrl2}
+                          alt=""
+                          className="max-h-[48%] w-full object-contain"
+                        />
+                      ) : null}
                     </div>
                   </div>
                 </div>
