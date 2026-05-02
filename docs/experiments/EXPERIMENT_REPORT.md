@@ -28,7 +28,7 @@ flowchart LR
 
 | 인물 (p1, `TEST2.jpg`) | 의류 (g1, `TESTIMG3.webp`) |
 |:---:|:---:|
-| ![실험 인물 p1](../../testIMG/myIMG/TEST2.jpg) | ![실험 의류 g1](../../testIMG/codyIMG/TESTIMG3.webp) |
+| ![실험 인물 p1](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/testIMG/myIMG/TEST2.jpg) | ![실험 의류 g1](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/testIMG/codyIMG/TESTIMG3.webp) |
 
 ### 출력 비교 — 동일 입력에서 Trial별 결과 (p1–g1)
 
@@ -36,19 +36,19 @@ steps·guidance만 달리한 합성 결과입니다.
 
 | T1 · 18 / 1.20 | T3 · 30 / 1.50 | T6 · 46 / 2.00 |
 |:---:|:---:|:---:|
-| ![T1 결과 p1-g1](../../scripts/experiments/results/T1/p1-g1.png) | ![T3 결과 p1-g1](../../scripts/experiments/results/T3/p1-g1.png) | ![T6 결과 p1-g1](../../scripts/experiments/results/T6/p1-g1.png) |
+| ![T1 결과 p1-g1](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/scripts/experiments/results/T1/p1-g1.png) | ![T3 결과 p1-g1](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/scripts/experiments/results/T3/p1-g1.png) | ![T6 결과 p1-g1](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/scripts/experiments/results/T6/p1-g1.png) |
 
 ### 출력 비교 — 최종 프리셋에 대응하는 Trial (p1–g1)
 
 | 빠름 **fast** (T2 · 22 / 1.35) | 기본 **default** (T3 · 30 / 1.50) | 느림 **slow** (T5 · 40 / 1.80) |
 |:---:|:---:|:---:|
-| ![T2 결과 p1-g1](../../scripts/experiments/results/T2/p1-g1.png) | ![T3 결과 p1-g1](../../scripts/experiments/results/T3/p1-g1.png) | ![T5 결과 p1-g1](../../scripts/experiments/results/T5/p1-g1.png) |
+| ![T2 결과 p1-g1](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/scripts/experiments/results/T2/p1-g1.png) | ![T3 결과 p1-g1](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/scripts/experiments/results/T3/p1-g1.png) | ![T5 결과 p1-g1](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/scripts/experiments/results/T5/p1-g1.png) |
 
 ### 추가 예시 (인물 p2 × 의류 g2, Trial **T3**)
 
-![T3 결과 p2-g2](../../scripts/experiments/results/T3/p2-g2.png)
+![T3 결과 p2-g2](https://raw.githubusercontent.com/kwakminoo/AI-Fitting-Web/main/scripts/experiments/results/T3/p2-g2.png)
 
-*미리보기에서 이미지가 보이지 않으면 워크스페이스 루트가 저장소 루트인지 확인하거나, VS Code / GitHub에서 본 파일 기준 상대 경로가 올바른지 확인합니다.*
+*GitHub 웹에서 이미지가 보이도록 `main` 브랜치 기준 raw URL을 사용합니다. 로컬 클론에서는 `testIMG/`, `scripts/experiments/results/` 경로의 동일 파일을 참고하면 됩니다.*
 
 ---
 
