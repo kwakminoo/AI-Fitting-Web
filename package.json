@@ -10,6 +10,10 @@
     "dev": "npm --prefix web run dev",
     "build": "npm --prefix web run build",
     "start": "npm --prefix web run start",
-    "lint": "npm --prefix web run lint"
+    "lint": "npm --prefix web run lint",
+    "report:pdf": "node scripts/experiments/build_experiment_report_pdf.cjs"
+  },
+  "devDependencies": {
+    "md-to-pdf": "^5.2.4"
   }
 }

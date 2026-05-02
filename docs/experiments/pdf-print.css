@@ -1,0 +1,58 @@
+/* md-to-pdf 출력용: 한글·표·이미지 가독성 */
+@page {
+  margin: 14mm 16mm;
+}
+body {
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: #111;
+}
+h1 {
+  font-size: 18pt;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 0.3em;
+}
+h2 {
+  font-size: 14pt;
+  margin-top: 1.2em;
+}
+h3 {
+  font-size: 12pt;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 9pt;
+  margin: 0.8em 0;
+}
+th,
+td {
+  border: 1px solid #999;
+  padding: 4px 6px;
+  vertical-align: top;
+}
+th {
+  background: #f3f4f6;
+}
+img {
+  max-width: 100%;
+  height: auto;
+}
+pre,
+code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 8.5pt;
+}
+pre {
+  background: #f8fafc;
+  padding: 8px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+blockquote {
+  border-left: 3px solid #cbd5e1;
+  margin: 0.5em 0;
+  padding-left: 0.75em;
+  color: #475569;
+}
